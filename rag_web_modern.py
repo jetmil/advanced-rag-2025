@@ -6,6 +6,8 @@ Modern RAG Interface 2025 - Glassmorphism + Particles
 import gradio as gr
 from rag_advanced_memory import AdvancedRAGMemory
 import os
+import subprocess
+import time
 from datetime import datetime
 from pathlib import Path
 
@@ -335,11 +337,35 @@ class ModernRAGInterface:
         self.is_initialized = False
         self.current_db_name = "Космоэнергетика"
 
+    def _release_resources(self):
+        """Освобождение ресурсов и процессов перед инициализацией"""
+        try:
+            # Освобождаем память старого RAG объекта
+            if self.rag is not None:
+                del self.rag
+                self.rag = None
+
+            # Принудительная сборка мусора Python
+            import gc
+            gc.collect()
+
+            # Даем время на освобождение ресурсов
+            time.sleep(1)
+
+            return True
+        except Exception as e:
+            print(f"⚠️ Предупреждение при освобождении ресурсов: {e}")
+            return False
+
     def initialize_rag(self, text_file_path, db_name, max_short_memory, max_context_tokens, progress=gr.Progress()):
         if not text_file_path or not os.path.exists(text_file_path):
             return "❌ Файл не найден!"
 
         try:
+            # Освобождаем ресурсы перед инициализацией
+            progress(0, desc="🔄 Освобождение ресурсов...")
+            self._release_resources()
+
             project_dir = Path(__file__).parent
             db_path = project_dir / f"chroma_db_{db_name.lower().replace(' ', '_')}"
 
@@ -347,9 +373,9 @@ class ModernRAGInterface:
             db_exists = os.path.exists(str(db_path))
 
             if db_exists:
-                progress(0, desc="✨ Найдена существующая база данных...")
+                progress(0.05, desc="✨ Найдена существующая база данных...")
             else:
-                progress(0, desc="✨ Инициализация новой базы данных...")
+                progress(0.05, desc="✨ Инициализация новой базы данных...")
 
             self.rag = AdvancedRAGMemory(
                 text_file_path=text_file_path,
