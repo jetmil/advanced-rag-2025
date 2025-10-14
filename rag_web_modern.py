@@ -19,10 +19,18 @@ MODERN_CSS = """
 }
 
 /* Фон с градиентом - бордово-фиолетовый */
-body, .gradio-container {
+body {
     background: linear-gradient(135deg, #8B0000 0%, #4B0082 50%, #8B008B 100%) !important;
+    background-attachment: fixed !important;
     position: relative;
-    overflow: hidden;
+    overflow-y: auto !important;
+    overflow-x: hidden !important;
+    min-height: 100vh !important;
+}
+
+.gradio-container {
+    background: rgba(255, 255, 255, 0.1) !important;
+    position: relative;
 }
 
 /* Анимированные частицы (легковесные) */
@@ -363,7 +371,8 @@ class ModernRAGInterface:
                 status_msg = f"✅ База '{db_name}' загружена из кэша (мгновенно!)"
             else:
                 progress(0.4, desc="📖 Чтение файла...")
-                documents = self.rag.load_and_split_documents(chunk_size=1000, chunk_overlap=200)
+                # Уменьшаем размер чанков и увеличиваем overlap для лучшего поиска
+                documents = self.rag.load_and_split_documents(chunk_size=500, chunk_overlap=100)
                 progress(0.6, desc="⚡ Векторизация на GPU...")
                 self.rag.create_vectorstore(documents, force_recreate=False)
                 status_msg = f"✅ База '{db_name}' создана ({len(documents)} чанков)"
@@ -371,7 +380,8 @@ class ModernRAGInterface:
             progress(0.8, desc="🔗 Подключение LM Studio...")
             self.rag.setup_lm_studio_llm(model_name="google/gemma-3-27b")
             progress(0.9, desc="⚙️ Настройка...")
-            self.rag.create_qa_chain(retriever_k=4)
+            # Увеличиваем количество источников для лучшего поиска
+            self.rag.create_qa_chain(retriever_k=10)
 
             self.is_initialized = True
             self.current_db_name = db_name
@@ -491,7 +501,7 @@ class ModernRAGInterface:
                         with gr.Accordion("⚙️ Параметры", open=False):
                             temperature = gr.Slider(0, 1, 0.7, 0.1, label="Temperature")
                             max_tokens = gr.Slider(500, 4000, 2000, 100, label="Max tokens")
-                            num_sources = gr.Slider(1, 10, 4, 1, label="Источников")
+                            num_sources = gr.Slider(1, 20, 10, 1, label="Источников (больше = точнее)")
 
                         ask_btn = gr.Button("✨ Спросить", variant="primary", size="lg")
 
