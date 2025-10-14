@@ -18,9 +18,9 @@ MODERN_CSS = """
     font-family: 'Inter', sans-serif !important;
 }
 
-/* Фон с градиентом */
+/* Фон с градиентом - бордово-фиолетовый */
 body, .gradio-container {
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;
+    background: linear-gradient(135deg, #8B0000 0%, #4B0082 50%, #8B008B 100%) !important;
     position: relative;
     overflow: hidden;
 }
@@ -148,13 +148,13 @@ input::placeholder, textarea::placeholder {
 
 /* Primary кнопка */
 .gr-button-primary {
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;
+    background: linear-gradient(135deg, #8B0000 0%, #8B008B 100%) !important;
     border: none !important;
-    box-shadow: 0 4px 20px rgba(102, 126, 234, 0.4) !important;
+    box-shadow: 0 4px 20px rgba(139, 0, 139, 0.4) !important;
 }
 
 .gr-button-primary:hover {
-    box-shadow: 0 6px 30px rgba(102, 126, 234, 0.6) !important;
+    box-shadow: 0 6px 30px rgba(139, 0, 139, 0.6) !important;
 }
 
 /* Слайдеры */
@@ -164,9 +164,9 @@ input::placeholder, textarea::placeholder {
 }
 
 .gr-slider input[type="range"]::-webkit-slider-thumb {
-    background: linear-gradient(135deg, #667eea, #764ba2) !important;
+    background: linear-gradient(135deg, #8B0000, #8B008B) !important;
     border-radius: 50% !important;
-    box-shadow: 0 2px 10px rgba(102, 126, 234, 0.5) !important;
+    box-shadow: 0 2px 10px rgba(139, 0, 139, 0.5) !important;
 }
 
 /* Аккордеоны */
@@ -212,8 +212,8 @@ label, .gr-label {
 }
 
 .progress-bar-fill {
-    background: linear-gradient(90deg, #667eea, #764ba2) !important;
-    box-shadow: 0 0 20px rgba(102, 126, 234, 0.6) !important;
+    background: linear-gradient(90deg, #8B0000, #8B008B) !important;
+    box-shadow: 0 0 20px rgba(139, 0, 139, 0.6) !important;
 }
 
 /* Скроллбар */
@@ -290,7 +290,14 @@ class ModernRAGInterface:
         try:
             project_dir = Path(__file__).parent
             db_path = project_dir / f"chroma_db_{db_name.lower().replace(' ', '_')}"
-            progress(0, desc="✨ Инициализация...")
+
+            # Проверка существования БД ДО инициализации
+            db_exists = os.path.exists(str(db_path))
+
+            if db_exists:
+                progress(0, desc="✨ Найдена существующая база данных...")
+            else:
+                progress(0, desc="✨ Инициализация новой базы данных...")
 
             self.rag = AdvancedRAGMemory(
                 text_file_path=text_file_path,
@@ -303,13 +310,13 @@ class ModernRAGInterface:
                 use_gpu=True
             )
 
-            progress(0.2, desc="🧠 Загрузка embedding...")
+            progress(0.2, desc="🧠 Загрузка embedding модели...")
 
-            if os.path.exists(str(db_path)):
-                progress(0.4, desc="📚 Загрузка БД...")
+            if db_exists:
+                progress(0.4, desc="📚 Загрузка существующей базы...")
                 from langchain_community.vectorstores import Chroma
                 self.rag.vectorstore = Chroma(persist_directory=str(db_path), embedding_function=self.rag.embeddings)
-                status_msg = f"✅ База '{db_name}' загружена"
+                status_msg = f"✅ База '{db_name}' загружена из кэша (мгновенно!)"
             else:
                 progress(0.4, desc="📖 Чтение файла...")
                 documents = self.rag.load_and_split_documents(chunk_size=1000, chunk_overlap=200)
