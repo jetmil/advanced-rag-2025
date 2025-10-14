@@ -6,8 +6,16 @@ echo    Advanced RAG 2025 - Запуск системы
 echo ═══════════════════════════════════════════════════════════
 echo.
 
+REM Закрытие предыдущих процессов Python (Gradio)
+echo [0/4] Закрытие предыдущих процессов...
+taskkill /F /FI "WINDOWTITLE eq Advanced RAG 2025*" >nul 2>&1
+taskkill /F /FI "WINDOWTITLE eq *rag_web_modern.py*" >nul 2>&1
+timeout /t 1 /nobreak >nul
+echo [OK] Предыдущие процессы закрыты
+echo.
+
 REM Проверка, что LM Studio запущен
-echo [1/3] Проверка LM Studio...
+echo [1/4] Проверка LM Studio...
 curl -s http://localhost:1234/v1/models >nul 2>&1
 if errorlevel 1 (
     echo.
@@ -21,18 +29,18 @@ if errorlevel 1 (
 )
 
 echo.
-echo [2/3] Запуск веб-интерфейса RAG...
+echo [2/4] Запуск веб-интерфейса RAG...
 echo [*] URL: http://localhost:7860
 echo.
 
 REM Запуск Python скрипта в новом окне
 start "Advanced RAG 2025" cmd /k "cd /d "%~dp0" && python rag_web_modern.py"
 
-echo [3/3] Ожидание инициализации веб-сервера...
+echo [3/4] Ожидание инициализации веб-сервера...
 timeout /t 5 /nobreak >nul
 
 REM Открытие браузера
-echo [*] Открываю браузер...
+echo [4/4] Открываю браузер...
 start http://localhost:7860
 
 echo.
