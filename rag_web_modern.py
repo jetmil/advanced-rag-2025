@@ -329,7 +329,7 @@ class ModernRAGInterface:
     def __init__(self):
         project_dir = Path(__file__).parent
         self.DEFAULT_DB_PATH = project_dir / "chroma_db_kosmoenergy"
-        self.DEFAULT_TEXT_FILE = r"C:\Users\PC\Downloads\consolidated_texts_20251014_235421_cleaned.txt"
+        self.DEFAULT_TEXT_FILE = str(project_dir / "cosmic_texts.txt")
         self.EMBEDDING_MODEL = "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
         self.rag = None
         self.is_initialized = False
