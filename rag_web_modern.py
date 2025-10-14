@@ -57,9 +57,11 @@ body::before {
         0 8px 32px 0 rgba(31, 38, 135, 0.37),
         inset 0 1px 1px 0 rgba(255, 255, 255, 0.1) !important;
     border: 1px solid rgba(255, 255, 255, 0.18) !important;
-    margin: 20px !important;
+    margin: 20px auto !important;
     padding: 30px !important;
-    max-width: 1400px !important;
+    max-width: 95vw !important;
+    width: 100% !important;
+    box-sizing: border-box !important;
 }
 
 /* Табы - Glassmorphism */
@@ -110,6 +112,10 @@ button.selected {
     padding: 12px 16px !important;
     font-size: 14px !important;
     transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
+    width: 100% !important;
+    box-sizing: border-box !important;
+    overflow-y: auto !important;
+    max-height: 600px !important;
 }
 
 .gr-input:focus, .gr-textbox:focus, textarea:focus, input:focus {
@@ -263,12 +269,50 @@ label, .gr-label {
     50% { transform: translateY(-10px); }
 }
 
+/* Адаптивность и прокрутка */
+.gr-row {
+    width: 100% !important;
+    max-width: 100% !important;
+    overflow-x: hidden !important;
+}
+
+.gr-column {
+    width: 100% !important;
+    max-width: 100% !important;
+    overflow-x: hidden !important;
+}
+
+/* Прокрутка для длинных текстов */
+.gr-textbox textarea {
+    overflow-y: auto !important;
+    max-height: 400px !important;
+}
+
 /* Responsive */
+@media (max-width: 1400px) {
+    .gradio-container {
+        max-width: 98vw !important;
+        margin: 10px auto !important;
+        padding: 20px !important;
+    }
+}
+
 @media (max-width: 768px) {
     .gradio-container {
-        margin: 10px !important;
+        margin: 5px auto !important;
         padding: 15px !important;
         border-radius: 20px !important;
+        max-width: 99vw !important;
+    }
+
+    .gr-button {
+        padding: 10px 16px !important;
+        font-size: 13px !important;
+    }
+
+    .gr-input, .gr-textbox, textarea, input {
+        font-size: 13px !important;
+        padding: 10px 12px !important;
     }
 }
 """
