@@ -7,6 +7,7 @@ import gradio as gr
 from rag_advanced_memory import AdvancedRAGMemory
 import os
 from datetime import datetime
+from pathlib import Path
 
 # Кастомный CSS в стиле 2025
 MODERN_CSS = """
@@ -274,7 +275,8 @@ label, .gr-label {
 
 class ModernRAGInterface:
     def __init__(self):
-        self.DEFAULT_DB_PATH = r"C:\Users\PC\chroma_db_kosmoenergy"
+        project_dir = Path(__file__).parent
+        self.DEFAULT_DB_PATH = project_dir / "chroma_db_kosmoenergy"
         self.DEFAULT_TEXT_FILE = r"C:\Users\PC\Downloads\consolidated_texts_20251014_235421_cleaned.txt"
         self.EMBEDDING_MODEL = "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
         self.rag = None
@@ -286,12 +288,13 @@ class ModernRAGInterface:
             return "❌ Файл не найден!"
 
         try:
-            db_path = f"C:\\Users\\PC\\chroma_db_{db_name.lower().replace(' ', '_')}"
+            project_dir = Path(__file__).parent
+            db_path = project_dir / f"chroma_db_{db_name.lower().replace(' ', '_')}"
             progress(0, desc="✨ Инициализация...")
 
             self.rag = AdvancedRAGMemory(
                 text_file_path=text_file_path,
-                db_path=db_path,
+                db_path=str(db_path),
                 embedding_model=self.EMBEDDING_MODEL,
                 max_short_memory=max_short_memory,
                 max_context_tokens=max_context_tokens,
@@ -302,10 +305,10 @@ class ModernRAGInterface:
 
             progress(0.2, desc="🧠 Загрузка embedding...")
 
-            if os.path.exists(db_path):
+            if os.path.exists(str(db_path)):
                 progress(0.4, desc="📚 Загрузка БД...")
                 from langchain_community.vectorstores import Chroma
-                self.rag.vectorstore = Chroma(persist_directory=db_path, embedding_function=self.rag.embeddings)
+                self.rag.vectorstore = Chroma(persist_directory=str(db_path), embedding_function=self.rag.embeddings)
                 status_msg = f"✅ База '{db_name}' загружена"
             else:
                 progress(0.4, desc="📖 Чтение файла...")
@@ -388,9 +391,10 @@ class ModernRAGInterface:
             return "❌ Система не инициализирована!", None
 
         filename = f"conversation_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt"
-        filepath = f"C:\\Users\\PC\\{filename}"
-        result = self.rag.export_conversation(filepath)
-        return f"✅ {result}", filepath
+        project_dir = Path(__file__).parent
+        filepath = project_dir / filename
+        result = self.rag.export_conversation(str(filepath))
+        return f"✅ {result}", str(filepath)
 
     def create_interface(self):
         with gr.Blocks(css=MODERN_CSS, title="Modern RAG 2025", theme=gr.themes.Soft()) as interface:
