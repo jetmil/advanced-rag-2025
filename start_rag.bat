@@ -10,7 +10,9 @@ REM Закрытие предыдущих процессов Python (Gradio)
 echo [0/4] Закрытие предыдущих процессов...
 taskkill /F /FI "WINDOWTITLE eq Advanced RAG 2025*" >nul 2>&1
 taskkill /F /FI "WINDOWTITLE eq *rag_web_modern.py*" >nul 2>&1
-timeout /t 1 /nobreak >nul
+REM Закрыть все Python процессы использующие порт 7860
+for /f "tokens=5" %%a in ('netstat -aon ^| findstr :7860') do taskkill /F /PID %%a >nul 2>&1
+timeout /t 2 /nobreak >nul
 echo [OK] Предыдущие процессы закрыты
 echo.
 
