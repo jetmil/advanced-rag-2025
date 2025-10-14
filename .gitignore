@@ -1,0 +1,30 @@
+# Advanced RAG 2025
+
+# Vector databases
+chroma_db_*/
+
+# Logs and conversations
+*.log
+conversation_*.txt
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Virtual environments
+venv/
+env/
+ENV/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
