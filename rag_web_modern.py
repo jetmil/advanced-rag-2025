@@ -379,9 +379,9 @@ class ModernRAGInterface:
 
             progress(0.8, desc="🔗 Подключение LM Studio...")
             self.rag.setup_lm_studio_llm(model_name="google/gemma-3-27b")
-            progress(0.9, desc="⚙️ Настройка...")
-            # Увеличиваем количество источников для лучшего поиска
-            self.rag.create_qa_chain(retriever_k=10)
+            progress(0.9, desc="⚙️ Настройка fuzzy search...")
+            # MMR для лучшего покрытия даже с опечатками
+            self.rag.create_qa_chain(retriever_k=10, use_mmr=True)
 
             self.is_initialized = True
             self.current_db_name = db_name
@@ -407,7 +407,12 @@ class ModernRAGInterface:
             return "❌ Введите вопрос!", "", "", ""
 
         try:
-            self.rag.retriever.search_kwargs = {"k": num_sources}
+            # Обновляем search_kwargs с учетом MMR
+            self.rag.retriever.search_kwargs = {
+                "k": num_sources,
+                "fetch_k": num_sources * 3,  # Больше кандидатов для fuzzy search
+                "lambda_mult": 0.5
+            }
             result = self.rag.query(question, max_tokens=int(max_tokens), temperature=temperature)
 
             sources = ""

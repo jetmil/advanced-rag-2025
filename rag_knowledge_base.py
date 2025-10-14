@@ -123,21 +123,40 @@ class LocalRAG:
         self.model_name = model_name
         return self.llm_client
 
-    def create_qa_chain(self, retriever_k: int = 4):
-        """Создание цепочки для QA"""
+    def create_qa_chain(self, retriever_k: int = 4, use_mmr: bool = True):
+        """
+        Создание цепочки для QA с поддержкой fuzzy search
+
+        Args:
+            retriever_k: количество документов для возврата
+            use_mmr: использовать MMR для разнообразия результатов
+        """
 
         if self.vectorstore is None:
             raise ValueError("Vectorstore not created. Call create_vectorstore() first.")
 
-        print(f"\nSetting up QA chain with retriever (k={retriever_k})...")
+        print(f"\nSetting up QA chain with retriever (k={retriever_k}, MMR={use_mmr})...")
 
-        # Создание retriever
-        self.retriever = self.vectorstore.as_retriever(
-            search_type="similarity",
-            search_kwargs={"k": retriever_k}
-        )
+        # Создание retriever с MMR для лучшего покрытия
+        if use_mmr:
+            self.retriever = self.vectorstore.as_retriever(
+                search_type="mmr",  # Maximal Marginal Relevance - больше разнообразия
+                search_kwargs={
+                    "k": retriever_k,
+                    "fetch_k": retriever_k * 3,  # Берем в 3 раза больше кандидатов
+                    "lambda_mult": 0.5  # Баланс между релевантностью и разнообразием
+                }
+            )
+        else:
+            self.retriever = self.vectorstore.as_retriever(
+                search_type="similarity",
+                search_kwargs={
+                    "k": retriever_k,
+                    "fetch_k": retriever_k * 2  # Больше кандидатов для similarity
+                }
+            )
 
-        print("QA chain ready!")
+        print("QA chain ready with fuzzy search support!")
         return self.retriever
 
     def query(self, question: str, max_tokens: int = 2000, temperature: float = 0.7) -> dict:
