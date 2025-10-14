@@ -253,9 +253,10 @@ class LocalRAG:
 def main():
     """Основная функция для быстрого запуска"""
 
-    # Настройки
-    TEXT_FILE = r"C:\Users\PC\Downloads\consolidated_texts_20251014_235421_cleaned.txt"
-    DB_PATH = r"C:\Users\PC\chroma_db_kosmoenergy"
+    # Настройки - относительные пути от папки проекта
+    project_dir = Path(__file__).parent
+    TEXT_FILE = str(project_dir / "cosmic_texts.txt")
+    DB_PATH = str(project_dir / "chroma_db_kosmoenergy")
 
     # Модели для embeddings (выберите одну):
     # - "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2" - быстрая, ~120MB
@@ -277,8 +278,8 @@ def main():
 
     # Загрузка и обработка документов
     documents = rag.load_and_split_documents(
-        chunk_size=1000,  # размер чанка
-        chunk_overlap=200  # перекрытие между чанками
+        chunk_size=500,  # размер чанка (уменьшено для лучшего поиска)
+        chunk_overlap=100  # перекрытие между чанками
     )
 
     # Создание векторного хранилища
@@ -288,7 +289,7 @@ def main():
     rag.setup_lm_studio_llm(model_name="google/gemma-3-27b")
 
     # Создание QA chain
-    rag.create_qa_chain(retriever_k=4)  # количество релевантных чанков
+    rag.create_qa_chain(retriever_k=10)  # количество релевантных чанков (увеличено для точности)
 
     print("\n" + "="*70)
     print("Setup complete! Starting interactive mode...")

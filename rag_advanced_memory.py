@@ -307,8 +307,10 @@ class AdvancedRAGMemory(LocalRAG):
 
 # Пример использования
 if __name__ == "__main__":
-    TEXT_FILE = r"C:\Users\PC\Downloads\consolidated_texts_20251014_235421_cleaned.txt"
-    DB_PATH = r"C:\Users\PC\chroma_db_kosmoenergy"
+    from pathlib import Path
+    project_dir = Path(__file__).parent
+    TEXT_FILE = str(project_dir / "cosmic_texts.txt")
+    DB_PATH = str(project_dir / "chroma_db_kosmoenergy")
 
     print("="*70)
     print("RAG с продвинутой памятью")
@@ -379,7 +381,7 @@ if __name__ == "__main__":
 
         if question.lower() == 'export':
             filename = f"conversation_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt"
-            filepath = f"C:\\Users\\PC\\{filename}"
+            filepath = str(project_dir / filename)
             print(rag.export_conversation(filepath))
             continue
 
