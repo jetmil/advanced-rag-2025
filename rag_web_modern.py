@@ -588,16 +588,32 @@ class ModernRAGInterface:
                 lines = f.readlines()
 
             if fuzzy:
-                # Нечёткий поиск: допускаем пропуски пробелов, опечатки
-                # Создаём паттерн который позволяет:
-                # 1. Пробелы между буквами (Мектабу → Мект абу)
-                # 2. Опциональные символы (для опечаток)
+                # Нечёткий поиск: допускаем пропуски пробелов внутри СЛОВ
+                # ВАЖНО: применяем fuzzy только к отдельным словам, не ко всему запросу!
+                # Иначе будет катастрофическая производительность на больших файлах
 
-                # Разбиваем запрос на буквы и добавляем \s* между ними
-                chars = list(query.lower())
-                fuzzy_pattern = '.*'.join([re.escape(c) + r'[\s\-]*' for c in chars[:-1]]) + re.escape(chars[-1])
-                pattern = re.compile(fuzzy_pattern, re.IGNORECASE | re.DOTALL)
-                logger.info(f"Fuzzy pattern: {fuzzy_pattern}")
+                # Извлекаем ключевые слова (слова от 3+ символов)
+                stopwords = {'что', 'как', 'где', 'когда', 'зачем', 'почему', 'какой', 'какая', 'какие', 'для', 'работы', 'канал', 'частота'}
+                words = re.findall(r'\b[а-яёА-ЯЁ]{3,}\b', query.lower())
+                keywords = [w for w in words if w not in stopwords]
+
+                if not keywords:
+                    # Если нет ключевых слов, используем точный поиск
+                    pattern = re.compile(re.escape(query), re.IGNORECASE)
+                    logger.info(f"Fuzzy: ключевых слов не найдено, точный поиск: {query}")
+                else:
+                    # Создаём fuzzy паттерн для КАЖДОГО слова отдельно
+                    fuzzy_words = []
+                    for keyword in keywords[:3]:  # Берем максимум 3 ключевых слова
+                        chars = list(keyword)
+                        # Добавляем [\s\-]* между буквами (опциональные пробелы/дефисы)
+                        fuzzy_word = ''.join([re.escape(c) + r'[\s\-]*' for c in chars[:-1]]) + re.escape(chars[-1])
+                        fuzzy_words.append(fuzzy_word)
+
+                    # Объединяем все fuzzy слова через OR (|)
+                    fuzzy_pattern = '|'.join([f'\\b{fw}\\b' for fw in fuzzy_words])
+                    pattern = re.compile(fuzzy_pattern, re.IGNORECASE)
+                    logger.info(f"Fuzzy keywords: {keywords[:3]} → pattern length: {len(fuzzy_pattern)} chars")
             else:
                 # Точный поиск
                 pattern = re.compile(query, re.IGNORECASE)
