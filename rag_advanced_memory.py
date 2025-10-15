@@ -77,39 +77,15 @@ class AdvancedRAGMemory(LocalRAG):
         words = re.findall(r'\b[а-яёА-ЯЁ]{4,}\b', query.lower())
         keywords = [w.capitalize() for w in words if w not in stopwords]
 
-        # 1. ПРЯМОЙ KEYWORD ПОИСК в ChromaDB (если есть имена собственные)
+        # 1. ВЕКТОРНЫЙ ПОИСК (MMR) - всегда используем, так как ChromaDB direct search слишком медленный
+        # Увеличиваем k для лучшего охвата при наличии ключевых слов
         if keywords:
-            # Используем where_document для прямого поиска
-            import chromadb
-            client = chromadb.PersistentClient(path=self.db_path)
-            collection = client.get_collection(name="langchain")
-
-            # Прямой поиск по keyword
-            keyword_docs = []
-            for keyword in keywords:
-                # ChromaDB where_document с $contains
-                results = collection.get(
-                    where_document={"$contains": keyword},
-                    include=["documents", "metadatas"],
-                    limit=k * 2  # Берем больше для разнообразия
-                )
-
-                # Конвертируем в LangChain Document objects
-                from langchain.docstore.document import Document
-                for i, doc_text in enumerate(results['documents']):
-                    meta = results['metadatas'][i] if results['metadatas'] else {}
-                    keyword_docs.append(Document(page_content=doc_text, metadata=meta))
-
-            # Если нашли документы по keyword - используем их
-            if keyword_docs:
-                vector_docs = keyword_docs
-            else:
-                # Fallback: векторный поиск если keyword не нашел
-                vector_docs = self.vectorstore.max_marginal_relevance_search(
-                    query, k=k * 3, fetch_k=k * 9, lambda_mult=0.5
-                )
+            # Больше документов для keyword фильтрации
+            vector_docs = self.vectorstore.max_marginal_relevance_search(
+                query, k=k * 5, fetch_k=k * 15, lambda_mult=0.3
+            )
         else:
-            # Нет ключевых слов - обычный векторный поиск
+            # Обычный векторный поиск
             vector_docs = self.vectorstore.max_marginal_relevance_search(
                 query, k=k * 3, fetch_k=k * 9, lambda_mult=0.5
             )
