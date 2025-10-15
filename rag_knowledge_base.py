@@ -334,8 +334,8 @@ def main():
     # Настройка LLM
     rag.setup_lm_studio_llm(model_name="google/gemma-3-27b")
 
-    # Создание QA chain
-    rag.create_qa_chain(retriever_k=10)  # количество релевантных чанков (увеличено для точности)
+    # Создание QA chain с MMR для fuzzy search
+    rag.create_qa_chain(retriever_k=10, use_mmr=True)  # количество релевантных чанков (увеличено для точности)
 
     print("\n" + "="*70)
     print("Setup complete! Starting interactive mode...")
