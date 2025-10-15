@@ -655,11 +655,17 @@ class ModernRAGInterface:
                 if not grep_results:
                     return "❌ GREP не нашел совпадений. Попробуйте режим RAG для семантического поиска.", "", "", ""
 
-                # 2. Берем контекст из GREP результатов
-                grep_contexts = [r['context'] for r in grep_results[:num_sources]]
+                # 2. Берем контекст из GREP результатов (ограничиваем для избежания переполнения)
+                # Берем максимум 10 результатов или num_sources, что меньше
+                max_grep_results = min(10, num_sources)
+                grep_contexts = [r['context'] for r in grep_results[:max_grep_results]]
                 combined_context = "\n\n".join(grep_contexts)
 
-                logger.info(f"GREP нашел {len(grep_results)} совпадений, отправляем {len(grep_contexts)} в RAG")
+                # Ограничиваем длину контекста (макс 3000 токенов ~= 12000 символов)
+                if len(combined_context) > 12000:
+                    combined_context = combined_context[:12000] + "\n\n... (контекст сокращен)"
+
+                logger.info(f"GREP нашел {len(grep_results)} совпадений, отправляем {len(grep_contexts)} в RAG (символов: {len(combined_context)})")
 
                 # 3. RAG анализирует найденные GREP совпадения
                 prompt = f"""Ты - эксперт по космоэнергетике.
