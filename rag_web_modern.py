@@ -580,7 +580,11 @@ class ModernRAGInterface:
 
         results = []
         try:
-            with open(self.DEFAULT_TEXT_FILE, 'r', encoding='utf-8') as f:
+            # Используем файл из RAG (тот который загружен)
+            text_file = self.rag.text_file_path if self.rag else self.DEFAULT_TEXT_FILE
+            logger.info(f"GREP ищет в файле: {text_file}")
+
+            with open(text_file, 'r', encoding='utf-8') as f:
                 lines = f.readlines()
 
             pattern = re.compile(query, re.IGNORECASE)
@@ -617,7 +621,7 @@ class ModernRAGInterface:
 
         try:
             # РЕЖИМ GREP: точный текстовый поиск
-            if search_mode == "🔍 GREP (точный поиск)":
+            if search_mode == "🔍 GREP":
                 logger.info("Режим GREP: точный текстовый поиск")
                 grep_results = self.grep_search(question, context_lines=5)
 
@@ -642,7 +646,7 @@ class ModernRAGInterface:
                 return answer, sources, memory_info, context
 
             # РЕЖИМ HYBRID: GREP + RAG
-            elif search_mode == "⚡ HYBRID (GREP + RAG)":
+            elif search_mode == "⚡ HYBRID":
                 logger.info("Режим HYBRID: GREP + RAG анализ")
 
                 # 1. Сначала GREP для точных совпадений
@@ -689,7 +693,7 @@ class ModernRAGInterface:
                 return answer, sources, memory_info, combined_context
 
             # РЕЖИМ RAG: семантический поиск + LLM (по умолчанию)
-            else:  # search_mode == "🤖 RAG (семантический)"
+            else:  # search_mode == "🤖 RAG"
                 logger.info("Режим RAG: семантический поиск + LLM")
 
                 # Обновляем search_kwargs с учетом MMR
@@ -824,10 +828,10 @@ class ModernRAGInterface:
                         )
 
                         search_mode = gr.Radio(
-                            choices=["🤖 RAG (семантический)", "🔍 GREP (точный поиск)", "⚡ HYBRID (GREP + RAG)"],
-                            value="🤖 RAG (семантический)",
-                            label="Режим поиска",
-                            info="RAG - семантика | GREP - точный текст | HYBRID - комбо"
+                            choices=["⚡ HYBRID", "🤖 RAG", "🔍 GREP"],
+                            value="⚡ HYBRID",
+                            label="🔎 Режим поиска",
+                            info="HYBRID=умный поиск+анализ | RAG=семантика | GREP=точный текст"
                         )
 
                         with gr.Accordion("⚙️ Параметры", open=False):
