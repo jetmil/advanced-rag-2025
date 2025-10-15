@@ -721,7 +721,7 @@ class ModernRAGInterface:
                         with gr.Accordion("⚙️ Параметры", open=False):
                             temperature = gr.Slider(0, 1, 0.7, 0.1, label="Temperature")
                             max_tokens = gr.Slider(500, 4000, 2000, 100, label="Max tokens")
-                            num_sources = gr.Slider(1, 20, 10, 1, label="Источников (больше = точнее)")
+                            num_sources = gr.Slider(1, 100, 20, 5, label="Источников (больше = полнее)")
 
                         ask_btn = gr.Button("✨ Спросить", variant="primary", size="lg")
 
