@@ -329,13 +329,83 @@ label, .gr-label {
 
 class ModernRAGInterface:
     def __init__(self):
-        project_dir = Path(__file__).parent
-        self.DEFAULT_DB_PATH = project_dir / "chroma_db_kosmoenergy"
-        self.DEFAULT_TEXT_FILE = str(project_dir / "cosmic_texts.txt")
+        self.project_dir = Path(__file__).parent
+        self.DEFAULT_DB_PATH = self.project_dir / "chroma_db_kosmoenergy"
+        self.DEFAULT_TEXT_FILE = str(self.project_dir / "cosmic_texts.txt")
         self.EMBEDDING_MODEL = "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
         self.rag = None
         self.is_initialized = False
         self.current_db_name = "Космоэнергетика"
+
+    def get_available_databases(self):
+        """Получение списка доступных баз данных"""
+        db_dirs = list(self.project_dir.glob("chroma_db_*"))
+        if not db_dirs:
+            return []
+
+        db_list = []
+        for db_dir in db_dirs:
+            # Извлекаем имя базы из папки
+            db_name = db_dir.name.replace("chroma_db_", "").replace("_", " ").title()
+            db_list.append(db_name)
+
+        return sorted(db_list)
+
+    def load_existing_database(self, db_choice, max_short_memory, max_context_tokens, progress=gr.Progress()):
+        """Загрузка существующей базы данных"""
+        if not db_choice:
+            return "❌ Выберите базу данных!"
+
+        try:
+            progress(0, desc="🔄 Освобождение ресурсов...")
+            self._release_resources()
+
+            # Преобразуем имя обратно в имя папки
+            db_name = db_choice.lower().replace(" ", "_")
+            db_path = self.project_dir / f"chroma_db_{db_name}"
+
+            if not db_path.exists():
+                return f"❌ База '{db_choice}' не найдена!"
+
+            progress(0.1, desc=f"📚 Загрузка базы '{db_choice}'...")
+
+            self.rag = AdvancedRAGMemory(
+                text_file_path=self.DEFAULT_TEXT_FILE,
+                db_path=str(db_path),
+                embedding_model=self.EMBEDDING_MODEL,
+                max_short_memory=max_short_memory,
+                max_context_tokens=max_context_tokens,
+                summarize_threshold=int(max_context_tokens * 0.7),
+                enable_auto_summarize=True,
+                use_gpu=True
+            )
+
+            progress(0.3, desc="🧠 Загрузка embedding модели...")
+
+            from langchain_community.vectorstores import Chroma
+            self.rag.vectorstore = Chroma(
+                persist_directory=str(db_path),
+                embedding_function=self.rag.embeddings
+            )
+
+            progress(0.6, desc="🔗 Подключение LM Studio...")
+            self.rag.setup_lm_studio_llm(model_name="google/gemma-3-27b")
+
+            progress(0.8, desc="⚙️ Настройка fuzzy search...")
+            self.rag.create_qa_chain(retriever_k=10, use_mmr=True)
+
+            self.is_initialized = True
+            self.current_db_name = db_choice
+            progress(1.0, desc="🎉 Готово!")
+
+            return f"""✅ База '{db_choice}' загружена успешно!
+
+📁 Путь: {db_path}
+💾 Память: {max_short_memory} недавних + автосуммаризация
+🎯 Контекст: {max_context_tokens} токенов"""
+
+        except Exception as e:
+            return f"❌ Ошибка загрузки: {str(e)}"
 
     def _release_resources(self):
         """Освобождение ресурсов и процессов перед инициализацией"""
@@ -501,13 +571,26 @@ class ModernRAGInterface:
 
                 with gr.Row():
                     with gr.Column():
+                        gr.Markdown("#### 📥 Загрузить существующую базу")
+                        db_dropdown = gr.Dropdown(
+                            label="📚 Выберите базу данных",
+                            choices=self.get_available_databases(),
+                            value=None,
+                            interactive=True
+                        )
+                        refresh_db_btn = gr.Button("🔄 Обновить список", size="sm")
+                        load_db_btn = gr.Button("📥 Загрузить базу", variant="secondary", size="lg")
+
+                        gr.Markdown("---")
+                        gr.Markdown("#### ✨ Или создать новую базу")
+
                         text_file_input = gr.Textbox(
                             label="📁 Путь к файлу",
                             value=self.DEFAULT_TEXT_FILE,
                             placeholder="C:\\путь\\к\\файлу.txt"
                         )
                         db_name_input = gr.Textbox(
-                            label="📚 Название базы",
+                            label="📚 Название новой базы",
                             value="Космоэнергетика"
                         )
 
@@ -515,7 +598,7 @@ class ModernRAGInterface:
                             max_short_memory = gr.Slider(3, 10, 5, 1, label="Короткая память")
                             max_context = gr.Slider(4000, 7000, 6000, 500, label="Макс токенов")
 
-                        init_btn = gr.Button("✨ Инициализировать", variant="primary", size="lg")
+                        init_btn = gr.Button("✨ Инициализировать новую", variant="primary", size="lg")
 
                     with gr.Column():
                         init_status = gr.Textbox(label="Статус", lines=12, interactive=False)
@@ -574,9 +657,16 @@ class ModernRAGInterface:
             """)
 
             # Events
+            # Инициализация
             init_btn.click(self.initialize_rag, [text_file_input, db_name_input, max_short_memory, max_context], [init_status])
+            load_db_btn.click(self.load_existing_database, [db_dropdown, max_short_memory, max_context], [init_status])
+            refresh_db_btn.click(lambda: gr.Dropdown(choices=self.get_available_databases()), outputs=[db_dropdown])
+
+            # Чат
             ask_btn.click(self.ask_question, [question_input, temperature, max_tokens, num_sources], [answer_output, sources_output, memory_info, context_output])
             question_input.submit(self.ask_question, [question_input, temperature, max_tokens, num_sources], [answer_output, sources_output, memory_info, context_output])
+
+            # Память
             stats_btn.click(self.get_stats, outputs=[stats_output])
             clear_btn.click(lambda: self.clear_memory(True), outputs=[stats_output])
             clear_all_btn.click(lambda: self.clear_memory(False), outputs=[stats_output])
