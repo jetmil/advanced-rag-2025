@@ -574,20 +574,33 @@ class ModernRAGInterface:
             logger.error(f"❌ ОШИБКА инициализации: {str(e)}", exc_info=True)
             return f"❌ Ошибка: {str(e)}"
 
-    def grep_search(self, query: str, context_lines: int = 3):
-        """Точный текстовый поиск (аналог grep)"""
+    def grep_search(self, query: str, context_lines: int = 3, fuzzy: bool = True):
+        """Текстовый поиск с поддержкой нечёткого поиска (fuzzy)"""
         import re
 
         results = []
         try:
             # Используем файл из RAG (тот который загружен)
             text_file = self.rag.text_file_path if self.rag else self.DEFAULT_TEXT_FILE
-            logger.info(f"GREP ищет в файле: {text_file}")
+            logger.info(f"GREP ищет в файле: {text_file} (fuzzy={fuzzy})")
 
             with open(text_file, 'r', encoding='utf-8') as f:
                 lines = f.readlines()
 
-            pattern = re.compile(query, re.IGNORECASE)
+            if fuzzy:
+                # Нечёткий поиск: допускаем пропуски пробелов, опечатки
+                # Создаём паттерн который позволяет:
+                # 1. Пробелы между буквами (Мектабу → Мект абу)
+                # 2. Опциональные символы (для опечаток)
+
+                # Разбиваем запрос на буквы и добавляем \s* между ними
+                chars = list(query.lower())
+                fuzzy_pattern = '.*'.join([re.escape(c) + r'[\s\-]*' for c in chars[:-1]]) + re.escape(chars[-1])
+                pattern = re.compile(fuzzy_pattern, re.IGNORECASE | re.DOTALL)
+                logger.info(f"Fuzzy pattern: {fuzzy_pattern}")
+            else:
+                # Точный поиск
+                pattern = re.compile(query, re.IGNORECASE)
 
             for i, line in enumerate(lines):
                 if pattern.search(line):
