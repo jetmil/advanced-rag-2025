@@ -10,6 +10,14 @@ from pathlib import Path
 from typing import List, Optional
 import warnings
 warnings.filterwarnings('ignore')
+import logging
+
+# Настройка логирования
+logging.basicConfig(
+    level=logging.DEBUG,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
 
 # LangChain imports
 from langchain_community.document_loaders import TextLoader
@@ -171,12 +179,24 @@ class LocalRAG:
         Returns:
             dict с ключами 'answer' и 'source_documents'
         """
+        logger.info(f"{'='*70}")
+        logger.info(f"RAG.query() вызван с вопросом: '{question}'")
+        logger.info(f"Параметры: max_tokens={max_tokens}, temperature={temperature}")
 
         if self.retriever is None:
+            logger.error("Retriever не создан!")
             raise ValueError("QA chain not created. Call create_qa_chain() first.")
 
         # Получение релевантных документов
+        logger.info("Получение релевантных документов...")
+        logger.debug(f"Retriever search_kwargs: {self.retriever.search_kwargs if hasattr(self.retriever, 'search_kwargs') else 'N/A'}")
+
         relevant_docs = self.retriever.get_relevant_documents(question)
+        logger.info(f"Найдено документов: {len(relevant_docs)}")
+
+        for i, doc in enumerate(relevant_docs[:3], 1):
+            preview = doc.page_content[:150].replace('\n', ' ')
+            logger.debug(f"Документ {i}: {preview}...")
 
         # Формирование контекста
         context = "\n\n".join([doc.page_content for doc in relevant_docs])
@@ -195,6 +215,10 @@ class LocalRAG:
 
         # Запрос к LM Studio
         try:
+            logger.info("Отправка запроса к LM Studio...")
+            logger.debug(f"Длина промпта: {len(prompt)} символов")
+            logger.debug(f"Длина контекста: {len(context)} символов")
+
             response = self.llm_client.chat.completions.create(
                 model=self.model_name,
                 messages=[
@@ -206,6 +230,8 @@ class LocalRAG:
             )
 
             answer = response.choices[0].message.content
+            logger.info(f"Получен ответ от LLM (длина: {len(answer)} символов)")
+            logger.debug(f"Ответ: {answer[:200]}...")
 
             return {
                 "answer": answer,
@@ -214,6 +240,7 @@ class LocalRAG:
             }
 
         except Exception as e:
+            logger.error(f"Ошибка при обращении к LM Studio: {str(e)}", exc_info=True)
             return {
                 "answer": f"Ошибка при обращении к LM Studio: {str(e)}\n\nПроверьте, что LM Studio запущен и модель загружена!",
                 "source_documents": relevant_docs,

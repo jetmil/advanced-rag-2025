@@ -10,6 +10,18 @@ import subprocess
 import time
 from datetime import datetime
 from pathlib import Path
+import logging
+
+# Настройка логирования
+logging.basicConfig(
+    level=logging.DEBUG,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.FileHandler('rag_debug.log', encoding='utf-8'),
+        logging.StreamHandler()
+    ]
+)
+logger = logging.getLogger(__name__)
 
 # Кастомный CSS в стиле 2025
 MODERN_CSS = """
@@ -353,21 +365,31 @@ class ModernRAGInterface:
 
     def load_existing_database(self, db_choice, max_short_memory, max_context_tokens, progress=gr.Progress()):
         """Загрузка существующей базы данных"""
+        logger.info(f"{'='*70}")
+        logger.info(f"ЗАГРУЗКА СУЩЕСТВУЮЩЕЙ БД")
+        logger.info(f"Выбрано: {db_choice}")
+
         if not db_choice:
+            logger.error("База не выбрана!")
             return "❌ Выберите базу данных!"
 
         try:
             progress(0, desc="🔄 Освобождение ресурсов...")
+            logger.info("Освобождение ресурсов...")
             self._release_resources()
 
             # Преобразуем имя обратно в имя папки
             db_name = db_choice.lower().replace(" ", "_")
             db_path = self.project_dir / f"chroma_db_{db_name}"
+            logger.info(f"Путь к БД: {db_path}")
+            logger.info(f"БД существует: {db_path.exists()}")
 
             if not db_path.exists():
+                logger.error(f"База не найдена: {db_path}")
                 return f"❌ База '{db_choice}' не найдена!"
 
             progress(0.1, desc=f"📚 Загрузка базы '{db_choice}'...")
+            logger.info(f"Загрузка базы '{db_choice}'...")
 
             self.rag = AdvancedRAGMemory(
                 text_file_path=self.DEFAULT_TEXT_FILE,
@@ -389,14 +411,23 @@ class ModernRAGInterface:
             )
 
             progress(0.6, desc="🔗 Подключение LM Studio...")
+            logger.info("Подключение к LM Studio...")
             self.rag.setup_lm_studio_llm(model_name="google/gemma-3-27b")
 
             progress(0.8, desc="⚙️ Настройка fuzzy search...")
+            logger.info("Настройка retriever с MMR (k=10)...")
             self.rag.create_qa_chain(retriever_k=10, use_mmr=True)
+
+            # Проверка настроек retriever
+            logger.info(f"Retriever search_type: {self.rag.retriever.search_type if hasattr(self.rag.retriever, 'search_type') else 'unknown'}")
+            logger.info(f"Retriever search_kwargs: {self.rag.retriever.search_kwargs}")
 
             self.is_initialized = True
             self.current_db_name = db_choice
             progress(1.0, desc="🎉 Готово!")
+
+            logger.info("✅ Загрузка БД завершена успешно!")
+            logger.info(f"{'='*70}")
 
             return f"""✅ База '{db_choice}' загружена успешно!
 
@@ -405,6 +436,7 @@ class ModernRAGInterface:
 🎯 Контекст: {max_context_tokens} токенов"""
 
         except Exception as e:
+            logger.error(f"❌ ОШИБКА загрузки БД: {str(e)}", exc_info=True)
             return f"❌ Ошибка загрузки: {str(e)}"
 
     def _release_resources(self):
@@ -428,24 +460,36 @@ class ModernRAGInterface:
             return False
 
     def initialize_rag(self, text_file_path, db_name, max_short_memory, max_context_tokens, progress=gr.Progress()):
+        logger.info(f"{'='*70}")
+        logger.info(f"ИНИЦИАЛИЗАЦИЯ RAG СИСТЕМЫ")
+        logger.info(f"Файл: {text_file_path}")
+        logger.info(f"Имя БД: {db_name}")
+        logger.info(f"Память: short={max_short_memory}, context={max_context_tokens}")
+
         if not text_file_path or not os.path.exists(text_file_path):
+            logger.error(f"Файл не найден: {text_file_path}")
             return "❌ Файл не найден!"
 
         try:
             # Освобождаем ресурсы перед инициализацией
             progress(0, desc="🔄 Освобождение ресурсов...")
+            logger.info("Освобождение ресурсов...")
             self._release_resources()
 
             project_dir = Path(__file__).parent
             db_path = project_dir / f"chroma_db_{db_name.lower().replace(' ', '_')}"
+            logger.info(f"Путь к БД: {db_path}")
 
             # Проверка существования БД ДО инициализации
             db_exists = os.path.exists(str(db_path))
+            logger.info(f"БД существует: {db_exists}")
 
             if db_exists:
                 progress(0.05, desc="✨ Найдена существующая база данных...")
+                logger.info("Загрузка существующей базы данных...")
             else:
                 progress(0.05, desc="✨ Инициализация новой базы данных...")
+                logger.info("Создание новой базы данных...")
 
             self.rag = AdvancedRAGMemory(
                 text_file_path=text_file_path,
@@ -474,14 +518,24 @@ class ModernRAGInterface:
                 status_msg = f"✅ База '{db_name}' создана ({len(documents)} чанков)"
 
             progress(0.8, desc="🔗 Подключение LM Studio...")
+            logger.info("Подключение к LM Studio...")
             self.rag.setup_lm_studio_llm(model_name="google/gemma-3-27b")
+
             progress(0.9, desc="⚙️ Настройка fuzzy search...")
+            logger.info("Настройка retriever с MMR (k=10)...")
             # MMR для лучшего покрытия даже с опечатками
             self.rag.create_qa_chain(retriever_k=10, use_mmr=True)
+
+            # Проверка настроек retriever
+            logger.info(f"Retriever search_type: {self.rag.retriever.search_type if hasattr(self.rag.retriever, 'search_type') else 'unknown'}")
+            logger.info(f"Retriever search_kwargs: {self.rag.retriever.search_kwargs}")
 
             self.is_initialized = True
             self.current_db_name = db_name
             progress(1.0, desc="🎉 Готово!")
+
+            logger.info("✅ Инициализация завершена успешно!")
+            logger.info(f"{'='*70}")
 
             return f"""✨ Система готова к работе!
 
@@ -494,22 +548,48 @@ class ModernRAGInterface:
 ⚠️ LM Studio должен быть запущен с Gemma-3-27B!"""
 
         except Exception as e:
+            logger.error(f"❌ ОШИБКА инициализации: {str(e)}", exc_info=True)
             return f"❌ Ошибка: {str(e)}"
 
     def ask_question(self, question, temperature, max_tokens, num_sources):
+        logger.info(f"="*70)
+        logger.info(f"НОВЫЙ ЗАПРОС: '{question}'")
+        logger.info(f"Параметры: temp={temperature}, max_tokens={max_tokens}, num_sources={num_sources}")
+
         if not self.is_initialized:
+            logger.error("Система не инициализирована!")
             return "❌ Сначала инициализируйте систему!", "", "", ""
         if not question.strip():
+            logger.error("Пустой вопрос!")
             return "❌ Введите вопрос!", "", "", ""
 
         try:
             # Обновляем search_kwargs с учетом MMR
-            self.rag.retriever.search_kwargs = {
+            logger.info(f"Текущая база данных: {self.current_db_name}")
+            logger.info(f"Путь к БД: {self.rag.db_path}")
+
+            search_kwargs = {
                 "k": num_sources,
                 "fetch_k": num_sources * 3,  # Больше кандидатов для fuzzy search
                 "lambda_mult": 0.5
             }
+            logger.info(f"search_kwargs: {search_kwargs}")
+            self.rag.retriever.search_kwargs = search_kwargs
+
+            logger.info("Начало поиска релевантных документов...")
+            # Сначала ищем документы напрямую для проверки
+            test_docs = self.rag.retriever.get_relevant_documents(question)
+            logger.info(f"Найдено документов: {len(test_docs)}")
+
+            for i, doc in enumerate(test_docs[:3], 1):
+                preview = doc.page_content[:200].replace('\n', ' ')
+                logger.debug(f"Документ {i}: {preview}...")
+
+            logger.info("Отправка запроса к LLM...")
             result = self.rag.query(question, max_tokens=int(max_tokens), temperature=temperature)
+
+            logger.info(f"Получен ответ от LLM (длина: {len(result['answer'])} символов)")
+            logger.debug(f"Ответ: {result['answer'][:200]}...")
 
             sources = ""
             for i, doc in enumerate(result['source_documents'], 1):
@@ -520,9 +600,12 @@ class ModernRAGInterface:
             memory_info = f"""💾 Память: {stats['short_memory_size']} недавних | {stats['long_memory_size']} суммаризированных
 📊 Токены: {stats['tokens_used']}/{stats['tokens_limit']} ({int(stats['tokens_used']/stats['tokens_limit']*100)}%)"""
 
+            logger.info("Запрос успешно обработан")
+            logger.info(f"="*70)
             return result['answer'], sources, memory_info, result.get('context', '')
 
         except Exception as e:
+            logger.error(f"ОШИБКА при обработке запроса: {str(e)}", exc_info=True)
             error = f"❌ Ошибка: {str(e)}"
             if "connection" in str(e).lower():
                 error += "\n\n⚠️ Проверьте LM Studio!"
