@@ -7,6 +7,7 @@ echo ═════════════════════════
 echo.
 echo    Умный агент с многоуровневой логикой поиска
 echo    Qwen3 сама выбирает инструменты и стратегию
+echo    ВНИМАНИЕ: Gemma3 зацикливается сильнее!
 echo.
 echo ═══════════════════════════════════════════════════════════
 echo.
@@ -17,6 +18,7 @@ taskkill /F /FI "WINDOWTITLE eq Advanced RAG 2025*" >nul 2>&1
 taskkill /F /FI "WINDOWTITLE eq SMART RAG Agent*" >nul 2>&1
 taskkill /F /FI "WINDOWTITLE eq *rag_web_modern.py*" >nul 2>&1
 taskkill /F /FI "WINDOWTITLE eq *rag_smart_qwen.py*" >nul 2>&1
+taskkill /F /FI "WINDOWTITLE eq *rag_smart_gemma.py*" >nul 2>&1
 REM Закрыть процессы на портах 7860 и 7861
 for /f "tokens=5" %%a in ('netstat -aon ^| findstr :7860') do taskkill /F /PID %%a >nul 2>&1
 for /f "tokens=5" %%a in ('netstat -aon ^| findstr :7861') do taskkill /F /PID %%a >nul 2>&1
@@ -66,9 +68,11 @@ if exist "chroma_db_ultimate" (
 echo.
 echo [4/5] Запуск SMART RAG Agent...
 echo [*] URL: http://localhost:7861
-echo [*] Режим: Qwen3 Function Calling
+echo [*] Режим: Qwen3-30B Function Calling (улучшенный!)
 echo [*] База: Ultimate (multilingual-e5-large)
-echo [*] Контекст: 16000 токенов
+echo [*] Контекст: 20000 токенов
+echo [*] Итераций: до 15 (остановка на 10-й)
+echo [*] Новая методика: GREP + RAG гибрид
 echo.
 
 REM Запуск SMART Agent в новом окне
@@ -88,13 +92,16 @@ echo ═════════════════════════
 echo.
 echo [+] SMART Agent: http://localhost:7861
 echo [+] LM Studio API: http://localhost:1234
-echo [+] Модель: Qwen3-30B-A3B (function calling)
+echo [+] Модель: Gemma 3-27B (function calling)
 echo [+] База: Ultimate (2.2GB embeddings)
+echo [+] VRAM: ~16GB (экономия 2GB vs Qwen3)
+echo [+] Скорость: На 10-15%% быстрее!
 echo.
 echo 💡 После запуска нажмите "Запустить SMART Agent"
 echo    Ultimate база загрузится автоматически!
 echo.
-echo ℹ️  Для обычного режима используйте: rag_web_modern.py
+echo ℹ️  Для Qwen3 версии используйте: python rag_smart_qwen.py
+echo ℹ️  Для обычного режима: rag_web_modern.py
 echo.
 echo Нажмите любую клавишу для выхода...
 pause >nul

@@ -1,5 +1,5 @@
 """
-SMART RAG Agent 2025 - Qwen3 Function Calling
+SMART RAG Agent 2025 - Gemma3 Function Calling
 Умный агент с многоуровневой логикой поиска
 """
 
@@ -114,7 +114,7 @@ label, .gr-label {
 
 class SmartQwenAgent:
     """
-    Умный агент на базе Qwen3 с function calling
+    Умный агент на базе Gemma3 с function calling
     Автоматически управляет поиском через RAG и GREP
     """
 
@@ -128,13 +128,13 @@ class SmartQwenAgent:
         self.is_initialized = False
         self.conversation_history = []  # Только финальные ответы!
 
-        # Инструменты доступные для Qwen3
+        # Инструменты доступные для Gemma3
         self.tools_schema = [
             {
                 "type": "function",
                 "function": {
                     "name": "grep_search",
-                    "description": "Точный текстовый поиск в базе знаний. ИСПОЛЬЗУЙ ПЕРВЫМ для конкретных названий/терминов ('магический год', 'обряды января'). Сначала ищет точную фразу, потом fuzzy по ключевым словам. Эффективнее RAG для точных названий!",
+                    "description": "Точный текстовый поиск в базе знаний. Используй для поиска конкретных имен каналов, терминов, частот. Поддерживает нечёткий поиск (fuzzy) - находит слова даже с пробелами внутри (например 'Мектабу' найдет 'Мект абу').",
                     "parameters": {
                         "type": "object",
                         "properties": {
@@ -225,9 +225,9 @@ class SmartQwenAgent:
                 embedding_function=self.rag.embeddings
             )
 
-            progress(0.7, desc="🔗 Подключение к Qwen3...")
-            # Подключаемся к Qwen3 через LM Studio
-            self.rag.setup_lm_studio_llm(model_name="qwen/qwen3-30b-a3b-2507")
+            progress(0.7, desc="🔗 Подключение к Gemma3...")
+            # Подключаемся к Gemma3 через LM Studio
+            self.rag.setup_lm_studio_llm(model_name="google/gemma-3-27b")
 
             progress(0.9, desc="⚙️ Настройка retriever...")
             self.rag.create_qa_chain(retriever_k=20, use_mmr=True)
@@ -241,13 +241,13 @@ class SmartQwenAgent:
             return f"""✅ SMART Agent готов к работе!
 
 🗄️ База: Ultimate (intfloat/multilingual-e5-large)
-🧠 Модель: Qwen3-30B-A3B (function calling)
+🧠 Модель: Gemma 3-27B (function calling)
 💾 Память: 10 последних + автосуммаризация
 🎯 Контекст: 20000 токенов (увеличенный!)
 🔄 Итераций: до 15 (принудительная остановка на 10-й)
 💪 Ресурсы: Мощный сервер - больше итераций!
 
-🤖 Qwen3 сам решит какие инструменты использовать!
+🤖 Gemma3 сам решит какие инструменты использовать!
 ⚡ Оптимизированная стратегия поиска - меньше зацикливания!"""
 
         except Exception as e:
@@ -272,7 +272,7 @@ class SmartQwenAgent:
             return f"❌ Ошибка выгрузки: {str(e)}"
 
     def grep_search(self, query: str, context_lines: int = 5):
-        """Инструмент: точный текстовый поиск с fuzzy и поддержкой фраз"""
+        """Инструмент: точный текстовый поиск с fuzzy"""
         logger.info(f"[TOOL] grep_search: '{query}'")
 
         try:
@@ -280,76 +280,44 @@ class SmartQwenAgent:
             with open(text_file, 'r', encoding='utf-8') as f:
                 lines = f.readlines()
 
-            # Сначала пробуем точный поиск по фразе (для "магический год")
-            exact_pattern = re.compile(re.escape(query), re.IGNORECASE)
-            exact_matches = []
-
-            for i, line in enumerate(lines):
-                if exact_pattern.search(line):
-                    start = max(0, i - context_lines)
-                    end = min(len(lines), i + context_lines + 1)
-                    context = ''.join(lines[start:end])
-                    exact_matches.append({
-                        'line_num': i + 1,
-                        'context': context[:500],
-                        'matched_line': line.strip()[:200],
-                        'match_type': 'exact'
-                    })
-                    if len(exact_matches) >= 15:
-                        break
-
-            # Если точное совпадение дало результаты - возвращаем их
-            if len(exact_matches) >= 3:
-                logger.info(f"[TOOL] grep_search: найдено {len(exact_matches)} точных совпадений")
-                return {
-                    "found": len(exact_matches),
-                    "results": exact_matches,
-                    "total": len(exact_matches),
-                    "search_type": "exact_phrase",
-                    "message": f"Найдено {len(exact_matches)} точных совпадений фразы '{query}'. Этого достаточно для ответа!"
-                }
-
-            # Иначе делаем fuzzy поиск по ключевым словам
-            stopwords = {'что', 'как', 'где', 'когда', 'зачем', 'почему', 'какой', 'какая', 'какие', 'для', 'работы', 'канал', 'частота', 'про', 'тебе', 'известно'}
+            # Fuzzy поиск по ключевым словам
+            stopwords = {'что', 'как', 'где', 'когда', 'зачем', 'почему', 'какой', 'какая', 'какие', 'для', 'работы', 'канал', 'частота'}
             words = re.findall(r'\b[а-яёА-ЯЁ]{3,}\b', query.lower())
             keywords = [w for w in words if w not in stopwords]
 
             if not keywords:
-                # Если ключевых слов нет - используем точный поиск
-                results = exact_matches
+                pattern = re.compile(re.escape(query), re.IGNORECASE)
             else:
                 fuzzy_words = []
-                for keyword in keywords[:3]:  # Берём первые 3 ключевых слова
+                for keyword in keywords[:3]:
                     chars = list(keyword)
                     fuzzy_word = ''.join([re.escape(c) + r'[\s\-]*' for c in chars[:-1]]) + re.escape(chars[-1])
                     fuzzy_words.append(fuzzy_word)
                 fuzzy_pattern = '|'.join([f'\\b{fw}\\b' for fw in fuzzy_words])
                 pattern = re.compile(fuzzy_pattern, re.IGNORECASE)
 
-                results = []
-                for i, line in enumerate(lines):
-                    if pattern.search(line):
-                        start = max(0, i - context_lines)
-                        end = min(len(lines), i + context_lines + 1)
-                        context = ''.join(lines[start:end])
-                        results.append({
-                            'line_num': i + 1,
-                            'context': context[:500],
-                            'matched_line': line.strip()[:200],
-                            'match_type': 'fuzzy'
-                        })
+            results = []
+            for i, line in enumerate(lines):
+                if pattern.search(line):
+                    start = max(0, i - context_lines)
+                    end = min(len(lines), i + context_lines + 1)
+                    context = ''.join(lines[start:end])
+                    results.append({
+                        'line_num': i + 1,
+                        'context': context[:500],  # Ограничиваем для экономии токенов
+                        'matched_line': line.strip()[:200]
+                    })
 
-                        if len(results) >= 15:
-                            break
+                    if len(results) >= 15:  # Максимум 15 результатов
+                        break
 
-            logger.info(f"[TOOL] grep_search: найдено {len(results)} совпадений (fuzzy)")
+            logger.info(f"[TOOL] grep_search: найдено {len(results)} совпадений")
 
             return {
                 "found": len(results),
-                "results": results,
+                "results": results,  # Возвращаем ВСЕ результаты (до 15)
                 "total": len(results),
-                "search_type": "fuzzy_keywords",
-                "message": f"Найдено {len(results)} совпадений по ключевым словам. Этого достаточно для ответа." if len(results) > 0 else "Ничего не найдено. Попробуй другой поисковый запрос или используй rag_semantic_search."
+                "message": f"Найдено {len(results)} совпадений. Этого достаточно для ответа." if len(results) > 0 else "Ничего не найдено. Попробуй другой поисковый запрос."
             }
 
         except Exception as e:
@@ -451,7 +419,7 @@ class SmartQwenAgent:
 
     def ask_smart_question(self, question: str, progress=gr.Progress()):
         """
-        Умный вопрос с Qwen3 function calling
+        Умный вопрос с Gemma3 function calling
         """
         if not self.is_initialized:
             return "❌ Система не инициализирована!", "", ""
@@ -463,7 +431,7 @@ class SmartQwenAgent:
         logger.info(f"SMART QUESTION: {question}")
 
         try:
-            # Системный промпт для Qwen3 с защитой от галлюцинаций
+            # Системный промпт для Gemma3 с защитой от галлюцинаций
             system_prompt = """Ты - ассистент работающий с базой знаний по ЭЗОТЕРИКЕ И КОСМОЭНЕРГЕТИКЕ.
 
 ⚠️ СОДЕРЖАНИЕ БАЗЫ ДАННЫХ:
@@ -484,27 +452,18 @@ class SmartQwenAgent:
 - rag_semantic_search: концептуальный поиск по смыслу
 - expand_query: варианты написания (использовать РЕДКО)
 
-⚡ СТРАТЕГИЯ ПОИСКА (ГИБРИДНАЯ - GREP + RAG):
-
-1. Вопрос про конкретное НАЗВАНИЕ/ТЕРМИН:
-   → СНАЧАЛА grep_search("точное название")
-   → Если нашёл >= 3 - дай ответ!
-   → Если нашёл < 3 - rag_semantic_search(описание, num_sources=30)
+⚡ СТРАТЕГИЯ ПОИСКА:
+1. Вопрос про конкретный канал:
+   → rag_semantic_search(название + ключевые слова, num_sources=30)
    → Дать ответ!
 
-2. Концептуальный/описательный вопрос:
-   → СРАЗУ rag_semantic_search(расширенный запрос, num_sources=50)
+2. Концептуальный вопрос:
+   → rag_semantic_search(расширенный запрос, num_sources=50)
    → Дать ответ!
 
-3. Если первый поиск дал < 5 результатов:
-   → Попробовать ДРУГОЙ инструмент (grep ↔ rag)
-   → Или изменить параметры запроса
-   → Максимум 2-3 вызова инструментов!
-
-4. СТРОГО запрещено:
-   → Повторять один и тот же поиск с теми же параметрами
-   → Делать больше 3 вызовов инструментов
-   → Если дубликат - сразу даёшь ответ на основе найденного
+3. Если найдено < 5 результатов:
+   → Попробовать grep_search ИЛИ другой запрос
+   → Максимум 3 вызова инструментов!
 
 🚫 АБСОЛЮТНЫЕ ЗАПРЕТЫ:
 1. НЕ ПРИДУМЫВАЙ информацию! Используй ТОЛЬКО найденные документы!
@@ -533,11 +492,10 @@ class SmartQwenAgent:
             ]
 
             tool_calls_history = []
-            previous_searches = set()  # Отслеживание дубликатов поисков
             max_iterations = 15  # Увеличено до 15 итераций (у вас мощный сервер!)
             force_stop_threshold = 10  # Принудительная остановка на 10-й итерации
 
-            progress(0.1, desc="🧠 Qwen3 планирует поиск...")
+            progress(0.1, desc="🧠 Gemma3 планирует поиск...")
 
             for iteration in range(max_iterations):
                 logger.info(f"--- Iteration {iteration + 1} ---")
@@ -554,9 +512,9 @@ class SmartQwenAgent:
                         "content": f"ВНИМАНИЕ! Это итерация {iteration + 1} из {max_iterations}. У тебя уже есть результаты {len(tool_calls_history)} вызовов инструментов. НЕМЕДЛЕННО дай финальный ответ на основе имеющейся информации. НЕ вызывай больше инструментов!"
                     })
 
-                # Запрос к Qwen3
+                # Запрос к Gemma3
                 response = self.rag.llm_client.chat.completions.create(
-                    model="qwen/qwen3-30b-a3b-2507",
+                    model="google/gemma-3-27b",
                     messages=messages,
                     tools=self.tools_schema,
                     tool_choice="none" if iteration >= (force_stop_threshold - 1) else "auto",  # Блокируем инструменты на пороге
@@ -566,7 +524,7 @@ class SmartQwenAgent:
 
                 assistant_message = response.choices[0].message
 
-                # Qwen3 хочет вызвать инструменты?
+                # Gemma3 хочет вызвать инструменты?
                 if assistant_message.tool_calls:
                     progress(0.3 + iteration * 0.1, desc=f"🔧 Выполнение инструментов ({iteration + 1})...")
 
@@ -594,31 +552,15 @@ class SmartQwenAgent:
 
                         logger.info(f"Calling: {function_name}({arguments})")
 
-                        # ПРОВЕРКА НА ДУБЛИКАТЫ: создаём ключ поиска
-                        search_key = f"{function_name}:{json.dumps(arguments, sort_keys=True, ensure_ascii=False)}"
-
-                        if search_key in previous_searches:
-                            # Этот поиск уже был выполнен!
-                            logger.warning(f"⚠️ DUPLICATE SEARCH DETECTED: {search_key}")
-                            result = {
-                                "error": "duplicate_search",
-                                "message": f"❌ Этот поиск уже выполнялся! Используй ДРУГИЕ параметры или дай финальный ответ на основе уже найденной информации. Повторный вызов {function_name} с теми же параметрами бессмыслен.",
-                                "found": 0,
-                                "hint": "Попробуй изменить query, num_sources или используй другой инструмент (grep вместо rag или наоборот)."
-                            }
+                        # Вызываем соответствующий инструмент
+                        if function_name == "grep_search":
+                            result = self.grep_search(**arguments)
+                        elif function_name == "rag_semantic_search":
+                            result = self.rag_semantic_search(**arguments)
+                        elif function_name == "expand_query":
+                            result = self.expand_query(**arguments)
                         else:
-                            # Новый поиск - выполняем
-                            previous_searches.add(search_key)
-
-                            # Вызываем соответствующий инструмент
-                            if function_name == "grep_search":
-                                result = self.grep_search(**arguments)
-                            elif function_name == "rag_semantic_search":
-                                result = self.rag_semantic_search(**arguments)
-                            elif function_name == "expand_query":
-                                result = self.expand_query(**arguments)
-                            else:
-                                result = {"error": "Unknown function"}
+                            result = {"error": "Unknown function"}
 
                         # Записываем в историю
                         tool_calls_history.append({
@@ -637,7 +579,7 @@ class SmartQwenAgent:
                     continue  # Следующая итерация
 
                 else:
-                    # Qwen3 готов дать финальный ответ
+                    # Gemma3 готов дать финальный ответ
                     progress(0.9, desc="✨ Синтез финального ответа...")
 
                     final_answer = assistant_message.content
@@ -784,7 +726,7 @@ class SmartQwenAgent:
 📚 В долгой памяти: {stats['long_memory_count']}
 
 💾 База: Ultimate (multilingual-e5-large)
-🧠 Модель: Qwen3-30B-A3B
+🧠 Модель: Gemma 3-27B
 ⚙️ Автосуммаризация: {'✅' if stats['auto_summarize_enabled'] else '❌'}"""
 
     def clear_memory(self, keep_summaries: bool):
@@ -847,7 +789,7 @@ class SmartQwenAgent:
                     🧠 SMART RAG Agent 2025
                 </h1>
                 <h3 style='color: rgba(255,255,255,0.8); margin-top: 10px;'>
-                    Qwen3 Function Calling • Защита от галлюцинаций • Проверка соответствия
+                    Gemma3 Function Calling • Защита от галлюцинаций • Проверка соответствия
                 </h3>
             </div>
             """)
@@ -916,7 +858,7 @@ class SmartQwenAgent:
             <div style='padding: 20px; background: rgba(255,255,255,0.05); border-radius: 15px; margin-top: 20px;'>
             <h3>💡 Как это работает</h3>
 
-            <h4>🤖 Qwen3 автоматически:</h4>
+            <h4>🤖 Gemma3 автоматически:</h4>
             <ul style='line-height: 1.8;'>
                 <li>🧠 Анализирует ваш вопрос</li>
                 <li>🔍 Выбирает нужные инструменты (GREP/RAG)</li>
@@ -982,7 +924,7 @@ def main():
     interface = agent.create_interface()
 
     print("="*70)
-    print("🧠 SMART RAG Agent 2025 - Qwen3 Function Calling")
+    print("🧠 SMART RAG Agent 2025 - Gemma3 Function Calling")
     print("="*70)
     print("✨ Умный многоуровневый поиск с автоматическим выбором инструментов")
     print("🗄️ Автозагрузка Ultimate базы (intfloat/multilingual-e5-large)")
