@@ -817,7 +817,7 @@ class ModernRAGInterface:
 
                         with gr.Accordion("⚙️ Настройки памяти", open=False):
                             max_short_memory = gr.Slider(3, 10, 5, 1, label="Короткая память")
-                            max_context = gr.Slider(4000, 7000, 6000, 500, label="Макс токенов")
+                            max_context = gr.Slider(6000, 16000, 8000, 1000, label="Макс токенов контекста")
 
                         init_btn = gr.Button("✨ Инициализировать новую", variant="primary", size="lg")
 

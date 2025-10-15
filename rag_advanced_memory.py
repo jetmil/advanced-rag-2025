@@ -23,8 +23,8 @@ class AdvancedRAGMemory(LocalRAG):
         self,
         *args,
         max_short_memory: int = 5,           # Последние N сообщений в полном виде
-        max_context_tokens: int = 6000,      # Макс токенов для контекста (с запасом)
-        summarize_threshold: int = 4000,     # Порог для суммаризации
+        max_context_tokens: int = 8000,      # Макс токенов для контекста (оптимально для RTX 3090)
+        summarize_threshold: int = 5500,     # Порог для суммаризации
         enable_auto_summarize: bool = True,  # Автосуммаризация
         **kwargs
     ):
