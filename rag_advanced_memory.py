@@ -7,6 +7,7 @@ from rag_knowledge_base import LocalRAG
 from typing import List, Dict, Optional
 import tiktoken
 from datetime import datetime
+import re
 
 class AdvancedRAGMemory(LocalRAG):
     """
@@ -54,6 +55,90 @@ class AdvancedRAGMemory(LocalRAG):
         else:
             # Приблизительно: 1 токен ≈ 4 символа для русского
             return len(text) // 4
+
+    def hybrid_search(self, query: str, k: int = 10, keyword_boost: float = 4.0):
+        """
+        Гибридный поиск: векторный + keyword фильтрация
+
+        1. Векторный поиск (MMR) - находит семантически похожие документы
+        2. Keyword фильтрация - проверяет наличие ключевых слов из запроса
+        3. Бустинг - повышает ранг документов с точным совпадением
+
+        Args:
+            query: поисковый запрос
+            k: количество документов
+            keyword_boost: коэффициент усиления для документов с точным совпадением
+        """
+        # Извлекаем ЗНАЧИМЫЕ СЛОВА (русские слова >=4 символа)
+        # ИСКЛЮЧАЕМ служебные слова и короткие предлоги
+        stopwords = {'что', 'как', 'где', 'когда', 'зачем', 'почему', 'какой', 'какая', 'какие', 'который', 'которая', 'которые', 'этот', 'эта', 'это', 'эти', 'того', 'тому', 'этого', 'общего'}
+        keywords = []
+        # Ищем ВСЕ русские слова длиной >=4 символа (независимо от регистра)
+        words = re.findall(r'\b[а-яёА-ЯЁ]{4,}\b', query.lower())
+        keywords = [w.capitalize() for w in words if w not in stopwords]
+
+        # 1. ПРЯМОЙ KEYWORD ПОИСК в ChromaDB (если есть имена собственные)
+        if keywords:
+            # Используем where_document для прямого поиска
+            import chromadb
+            client = chromadb.PersistentClient(path=self.db_path)
+            collection = client.get_collection(name="langchain")
+
+            # Прямой поиск по keyword
+            keyword_docs = []
+            for keyword in keywords:
+                # ChromaDB where_document с $contains
+                results = collection.get(
+                    where_document={"$contains": keyword},
+                    include=["documents", "metadatas"],
+                    limit=k * 2  # Берем больше для разнообразия
+                )
+
+                # Конвертируем в LangChain Document objects
+                from langchain.docstore.document import Document
+                for i, doc_text in enumerate(results['documents']):
+                    meta = results['metadatas'][i] if results['metadatas'] else {}
+                    keyword_docs.append(Document(page_content=doc_text, metadata=meta))
+
+            # Если нашли документы по keyword - используем их
+            if keyword_docs:
+                vector_docs = keyword_docs
+            else:
+                # Fallback: векторный поиск если keyword не нашел
+                vector_docs = self.vectorstore.max_marginal_relevance_search(
+                    query, k=k * 3, fetch_k=k * 9, lambda_mult=0.5
+                )
+        else:
+            # Нет ключевых слов - обычный векторный поиск
+            vector_docs = self.vectorstore.max_marginal_relevance_search(
+                query, k=k * 3, fetch_k=k * 9, lambda_mult=0.5
+            )
+
+        # 2. Keyword фильтрация и ранжирование
+        scored_docs = []
+        for doc in vector_docs:
+            content = doc.page_content
+            score = 1.0  # Базовый скор от векторного поиска
+
+            # Подсчет совпадений ключевых слов
+            matches = 0
+            for keyword in keywords:
+                if keyword in content or keyword.lower() in content.lower():
+                    matches += 1
+
+            # Бустинг документов с ключевыми словами
+            if matches > 0:
+                score = score * (keyword_boost ** matches)
+
+            scored_docs.append((score, doc, matches))
+
+        # Сортировка по скору
+        scored_docs.sort(key=lambda x: x[0], reverse=True)
+
+        # Возврат топ-k документов
+        result_docs = [doc for _, doc, _ in scored_docs[:k]]
+
+        return result_docs
 
     def _summarize_old_messages(self) -> str:
         """Суммаризация старых сообщений"""
@@ -199,8 +284,8 @@ class AdvancedRAGMemory(LocalRAG):
             print("🔄 Принудительная суммаризация...")
             self._summarize_old_messages()
 
-        # Получение релевантных документов
-        relevant_docs = self.retriever.get_relevant_documents(question)
+        # Получение релевантных документов через ГИБРИДНЫЙ ПОИСК
+        relevant_docs = self.hybrid_search(question, k=10)
         context = "\n\n".join([doc.page_content for doc in relevant_docs])
 
         # Формирование промпта с оптимальной памятью

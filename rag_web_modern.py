@@ -363,6 +363,21 @@ class ModernRAGInterface:
 
         return sorted(db_list)
 
+    def detect_embedding_model(self, db_name):
+        """Определение embedding модели по имени базы данных"""
+        db_name_lower = db_name.lower()
+
+        # Ultimate база использует multilingual-e5-large (1024 dims)
+        if "ultimate" in db_name_lower:
+            return "intfloat/multilingual-e5-large"
+
+        # Labse база
+        if "labse" in db_name_lower:
+            return "sentence-transformers/LaBSE"
+
+        # По умолчанию старая модель (384 dims)
+        return "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
+
     def load_existing_database(self, db_choice, max_short_memory, max_context_tokens, progress=gr.Progress()):
         """Загрузка существующей базы данных"""
         logger.info(f"{'='*70}")
@@ -391,10 +406,14 @@ class ModernRAGInterface:
             progress(0.1, desc=f"📚 Загрузка базы '{db_choice}'...")
             logger.info(f"Загрузка базы '{db_choice}'...")
 
+            # Автоопределение embedding модели по имени базы
+            embedding_model = self.detect_embedding_model(db_choice)
+            logger.info(f"Определена embedding модель: {embedding_model}")
+
             self.rag = AdvancedRAGMemory(
                 text_file_path=self.DEFAULT_TEXT_FILE,
                 db_path=str(db_path),
-                embedding_model=self.EMBEDDING_MODEL,
+                embedding_model=embedding_model,
                 max_short_memory=max_short_memory,
                 max_context_tokens=max_context_tokens,
                 summarize_threshold=int(max_context_tokens * 0.7),
@@ -491,10 +510,14 @@ class ModernRAGInterface:
                 progress(0.05, desc="✨ Инициализация новой базы данных...")
                 logger.info("Создание новой базы данных...")
 
+            # Автоопределение embedding модели по имени базы
+            embedding_model = self.detect_embedding_model(db_name)
+            logger.info(f"Определена embedding модель: {embedding_model}")
+
             self.rag = AdvancedRAGMemory(
                 text_file_path=text_file_path,
                 db_path=str(db_path),
-                embedding_model=self.EMBEDDING_MODEL,
+                embedding_model=embedding_model,
                 max_short_memory=max_short_memory,
                 max_context_tokens=max_context_tokens,
                 summarize_threshold=int(max_context_tokens * 0.7),
