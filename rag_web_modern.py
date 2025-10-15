@@ -574,10 +574,39 @@ class ModernRAGInterface:
             logger.error(f"❌ ОШИБКА инициализации: {str(e)}", exc_info=True)
             return f"❌ Ошибка: {str(e)}"
 
-    def ask_question(self, question, temperature, max_tokens, num_sources):
+    def grep_search(self, query: str, context_lines: int = 3):
+        """Точный текстовый поиск (аналог grep)"""
+        import re
+
+        results = []
+        try:
+            with open(self.DEFAULT_TEXT_FILE, 'r', encoding='utf-8') as f:
+                lines = f.readlines()
+
+            pattern = re.compile(query, re.IGNORECASE)
+
+            for i, line in enumerate(lines):
+                if pattern.search(line):
+                    # Берем контекст
+                    start = max(0, i - context_lines)
+                    end = min(len(lines), i + context_lines + 1)
+
+                    context = ''.join(lines[start:end])
+                    results.append({
+                        'line_num': i + 1,
+                        'context': context,
+                        'matched_line': line.strip()
+                    })
+
+            return results
+        except Exception as e:
+            logger.error(f"GREP ошибка: {e}")
+            return []
+
+    def ask_question(self, question, temperature, max_tokens, num_sources, search_mode):
         logger.info(f"="*70)
         logger.info(f"НОВЫЙ ЗАПРОС: '{question}'")
-        logger.info(f"Параметры: temp={temperature}, max_tokens={max_tokens}, num_sources={num_sources}")
+        logger.info(f"Параметры: temp={temperature}, max_tokens={max_tokens}, num_sources={num_sources}, mode={search_mode}")
 
         if not self.is_initialized:
             logger.error("Система не инициализирована!")
@@ -587,45 +616,121 @@ class ModernRAGInterface:
             return "❌ Введите вопрос!", "", "", ""
 
         try:
-            # Обновляем search_kwargs с учетом MMR
-            logger.info(f"Текущая база данных: {self.current_db_name}")
-            logger.info(f"Путь к БД: {self.rag.db_path}")
+            # РЕЖИМ GREP: точный текстовый поиск
+            if search_mode == "🔍 GREP (точный поиск)":
+                logger.info("Режим GREP: точный текстовый поиск")
+                grep_results = self.grep_search(question, context_lines=5)
 
-            search_kwargs = {
-                "k": num_sources,
-                "fetch_k": num_sources * 3,  # Больше кандидатов для fuzzy search
-                "lambda_mult": 0.5
-            }
-            logger.info(f"search_kwargs: {search_kwargs}")
-            self.rag.retriever.search_kwargs = search_kwargs
+                if not grep_results:
+                    return "❌ Ничего не найдено (GREP)", "", "", ""
 
-            logger.info("Начало поиска релевантных документов...")
-            # Сначала ищем документы напрямую для проверки
-            test_docs = self.rag.retriever.get_relevant_documents(question)
-            logger.info(f"Найдено документов: {len(test_docs)}")
+                # Формируем ответ
+                answer = f"🔍 GREP нашел {len(grep_results)} совпадений:\n\n"
+                sources = ""
 
-            for i, doc in enumerate(test_docs[:3], 1):
-                preview = doc.page_content[:200].replace('\n', ' ')
-                logger.debug(f"Документ {i}: {preview}...")
+                for i, result in enumerate(grep_results[:20], 1):  # Первые 20
+                    answer += f"[{i}] Строка {result['line_num']}: {result['matched_line']}\n\n"
+                    sources += f"📄 Совпадение {i} (строка {result['line_num']})\n{result['context']}\n{'='*70}\n\n"
 
-            logger.info("Отправка запроса к LLM...")
-            result = self.rag.query(question, max_tokens=int(max_tokens), temperature=temperature)
+                if len(grep_results) > 20:
+                    answer += f"\n... и еще {len(grep_results) - 20} совпадений"
 
-            logger.info(f"Получен ответ от LLM (длина: {len(result['answer'])} символов)")
-            logger.debug(f"Ответ: {result['answer'][:200]}...")
+                memory_info = f"🔍 GREP: {len(grep_results)} найдено | Режим: точный поиск"
+                context = "\n\n".join([r['context'] for r in grep_results[:20]])
 
-            sources = ""
-            for i, doc in enumerate(result['source_documents'], 1):
-                content = doc.page_content[:400]
-                sources += f"📄 Источник {i}\n{content}{'...' if len(doc.page_content) > 400 else ''}\n\n"
+                logger.info(f"GREP: найдено {len(grep_results)} совпадений")
+                return answer, sources, memory_info, context
 
-            stats = result['memory_stats']
-            memory_info = f"""💾 Память: {stats['short_memory_size']} недавних | {stats['long_memory_size']} суммаризированных
+            # РЕЖИМ HYBRID: GREP + RAG
+            elif search_mode == "⚡ HYBRID (GREP + RAG)":
+                logger.info("Режим HYBRID: GREP + RAG анализ")
+
+                # 1. Сначала GREP для точных совпадений
+                grep_results = self.grep_search(question, context_lines=5)
+
+                if not grep_results:
+                    return "❌ GREP не нашел совпадений. Попробуйте режим RAG для семантического поиска.", "", "", ""
+
+                # 2. Берем контекст из GREP результатов
+                grep_contexts = [r['context'] for r in grep_results[:num_sources]]
+                combined_context = "\n\n".join(grep_contexts)
+
+                logger.info(f"GREP нашел {len(grep_results)} совпадений, отправляем {len(grep_contexts)} в RAG")
+
+                # 3. RAG анализирует найденные GREP совпадения
+                prompt = f"""Ты - эксперт по космоэнергетике.
+
+Вопрос пользователя: {question}
+
+Найденные точные совпадения в тексте:
+{combined_context}
+
+Проанализируй эти фрагменты и дай подробный ответ на вопрос пользователя."""
+
+                response = self.rag.llm_client.chat.completions.create(
+                    model=self.rag.model_name,
+                    messages=[
+                        {"role": "system", "content": "Ты - эксперт по космоэнергетике, анализируешь точные совпадения из текста."},
+                        {"role": "user", "content": prompt}
+                    ],
+                    max_tokens=int(max_tokens),
+                    temperature=temperature
+                )
+
+                answer = f"⚡ HYBRID: найдено {len(grep_results)} точных совпадений (GREP), анализ RAG:\n\n" + response.choices[0].message.content
+
+                sources = f"🔍 GREP нашел {len(grep_results)} совпадений:\n\n"
+                for i, result in enumerate(grep_results[:10], 1):
+                    sources += f"📄 Совпадение {i} (строка {result['line_num']})\n{result['context'][:400]}...\n\n"
+
+                memory_info = f"⚡ HYBRID: GREP {len(grep_results)} → RAG анализ"
+
+                logger.info("HYBRID успешно: GREP + RAG анализ")
+                return answer, sources, memory_info, combined_context
+
+            # РЕЖИМ RAG: семантический поиск + LLM (по умолчанию)
+            else:  # search_mode == "🤖 RAG (семантический)"
+                logger.info("Режим RAG: семантический поиск + LLM")
+
+                # Обновляем search_kwargs с учетом MMR
+                logger.info(f"Текущая база данных: {self.current_db_name}")
+                logger.info(f"Путь к БД: {self.rag.db_path}")
+
+                search_kwargs = {
+                    "k": num_sources,
+                    "fetch_k": num_sources * 3,  # Больше кандидатов для fuzzy search
+                    "lambda_mult": 0.5
+                }
+                logger.info(f"search_kwargs: {search_kwargs}")
+                self.rag.retriever.search_kwargs = search_kwargs
+
+                logger.info("Начало поиска релевантных документов...")
+                # Сначала ищем документы напрямую для проверки
+                test_docs = self.rag.retriever.get_relevant_documents(question)
+                logger.info(f"Найдено документов: {len(test_docs)}")
+
+                for i, doc in enumerate(test_docs[:3], 1):
+                    preview = doc.page_content[:200].replace('\n', ' ')
+                    logger.debug(f"Документ {i}: {preview}...")
+
+                logger.info("Отправка запроса к LLM...")
+                result = self.rag.query(question, max_tokens=int(max_tokens), temperature=temperature)
+
+                logger.info(f"Получен ответ от LLM (длина: {len(result['answer'])} символов)")
+                logger.debug(f"Ответ: {result['answer'][:200]}...")
+
+                sources = ""
+                for i, doc in enumerate(result['source_documents'], 1):
+                    content = doc.page_content[:400]
+                    sources += f"📄 Источник {i}\n{content}{'...' if len(doc.page_content) > 400 else ''}\n\n"
+
+                stats = result['memory_stats']
+                memory_info = f"""💾 Память: {stats['short_memory_size']} недавних | {stats['long_memory_size']} суммаризированных
 📊 Токены: {stats['tokens_used']}/{stats['tokens_limit']} ({int(stats['tokens_used']/stats['tokens_limit']*100)}%)"""
 
-            logger.info("Запрос успешно обработан")
-            logger.info(f"="*70)
-            return result['answer'], sources, memory_info, result.get('context', '')
+                logger.info("Запрос успешно обработан")
+                logger.info(f"="*70)
+                return result['answer'], sources, memory_info, result.get('context', '')
 
         except Exception as e:
             logger.error(f"ОШИБКА при обработке запроса: {str(e)}", exc_info=True)
@@ -718,6 +823,13 @@ class ModernRAGInterface:
                             lines=3
                         )
 
+                        search_mode = gr.Radio(
+                            choices=["🤖 RAG (семантический)", "🔍 GREP (точный поиск)", "⚡ HYBRID (GREP + RAG)"],
+                            value="🤖 RAG (семантический)",
+                            label="Режим поиска",
+                            info="RAG - семантика | GREP - точный текст | HYBRID - комбо"
+                        )
+
                         with gr.Accordion("⚙️ Параметры", open=False):
                             temperature = gr.Slider(0, 1, 0.7, 0.1, label="Temperature")
                             max_tokens = gr.Slider(500, 4000, 2000, 100, label="Max tokens")
@@ -769,8 +881,8 @@ class ModernRAGInterface:
             refresh_db_btn.click(lambda: gr.Dropdown(choices=self.get_available_databases()), outputs=[db_dropdown])
 
             # Чат
-            ask_btn.click(self.ask_question, [question_input, temperature, max_tokens, num_sources], [answer_output, sources_output, memory_info, context_output])
-            question_input.submit(self.ask_question, [question_input, temperature, max_tokens, num_sources], [answer_output, sources_output, memory_info, context_output])
+            ask_btn.click(self.ask_question, [question_input, temperature, max_tokens, num_sources, search_mode], [answer_output, sources_output, memory_info, context_output])
+            question_input.submit(self.ask_question, [question_input, temperature, max_tokens, num_sources, search_mode], [answer_output, sources_output, memory_info, context_output])
 
             # Память
             stats_btn.click(self.get_stats, outputs=[stats_output])
